@@ -97,7 +97,7 @@ def run_simulation_optimized(num_simulations, population_size, red_percentage,
     results = {}
 
     # Process simulations in batches to manage memory
-    batch_size = 1000  # Adjust batch size as needed
+    batch_size = 10000  # Try increasing to 5000 or 10000 if memory allows
     num_batches = (num_simulations + batch_size - 1) // batch_size
 
     for batch_idx in range(num_batches):
@@ -166,7 +166,8 @@ def run_simulation_optimized(num_simulations, population_size, red_percentage,
         # Update progress
         progress = ((batch_idx + 1) * current_batch_size) / num_simulations * 100
         progress_queue.put(progress)
-        print(f"Progress: {progress:.2f}%")
+        print(f"Starting batch {batch_idx + 1}/{num_batches}")
+
 
     progress_queue.put("done")
     progress_queue.put(results)
@@ -175,22 +176,28 @@ def run_simulation_optimized(num_simulations, population_size, red_percentage,
 def simulate(num_simulations, population_size, red_percentage, 
              num_republicans, rep_selection, num_democrats, dem_selection, 
              num_third_parties, progress_queue, stop_flag):
-    # Call the simulation function with the stop_flag
-    run_simulation_optimized(
-        num_simulations=num_simulations,
-        population_size=population_size,
-        red_percentage=red_percentage,
-        num_republicans=num_republicans,
-        rep_selection=rep_selection,
-        num_democrats=num_democrats,
-        dem_selection=dem_selection,
-        num_third_parties=num_third_parties,
-        progress_queue=progress_queue,
-        stop_flag=stop_flag
-    )
+    try:
+        run_simulation_optimized(
+            num_simulations=num_simulations,
+            population_size=population_size,
+            red_percentage=red_percentage,
+            num_republicans=num_republicans,
+            rep_selection=rep_selection,
+            num_democrats=num_democrats,
+            dem_selection=dem_selection,
+            num_third_parties=num_third_parties,
+            progress_queue=progress_queue,
+            stop_flag=stop_flag
+        )
+    except Exception as e:
+        progress_queue.put(f"error: {e}")
 
 # Function to start the simulation
 def start_simulation():
+    if run_button['state'] == 'disabled':
+        messagebox.showwarning("Simulation Running", "A simulation is already running. Please wait until it completes or cancel it before starting a new one.")
+        return
+
     # Reset the stop flag
     stop_flag.clear()
     # Enable the Stop button
@@ -250,17 +257,21 @@ def check_queue(progress_queue, num_simulations, result_text, run_button):
             msg = progress_queue.get_nowait()
             if isinstance(msg, float):
                 progress_var.set(msg)
-            elif isinstance(msg, str) and msg.startswith("error"):
-                messagebox.showerror("Simulation Error", msg)
-                run_button.config(state='normal')
-                return
-            elif msg == "done":
-                continue
-            elif msg == "cancelled":
-                result_text.insert(tk.END, "Simulation cancelled by user.\n")
-                run_button.config(state='normal')
-                stop_button.config(state='disabled')
-                return
+            elif isinstance(msg, str):
+                if msg.startswith("error"):
+                    messagebox.showerror("Simulation Error", msg)
+                    run_button.config(state='normal')
+                    stop_button.config(state='disabled')
+                    return
+                elif msg == "done":
+                    # Simulation completed successfully
+                    # Do not return here; wait for results dictionary
+                    pass
+                elif msg == "cancelled":
+                    result_text.insert(tk.END, "Simulation cancelled by user.\n")
+                    run_button.config(state='normal')
+                    stop_button.config(state='disabled')
+                    return
             elif isinstance(msg, dict):
                 # Simulation complete, process results
                 results = msg
@@ -282,27 +293,18 @@ def check_queue(progress_queue, num_simulations, result_text, run_button):
                 # Update the result_text widget
                 result_text.insert(tk.END, result_str)
 
-                # Re-enable the run button
+                # Re-enable the run button and disable the stop button
                 run_button.config(state='normal')
+                stop_button.config(state='disabled')
+                return
     except Exception as e:
         messagebox.showerror("Error", f"An unexpected error occurred: {e}")
         run_button.config(state='normal')
+        stop_button.config(state='disabled')
         return
 
-    # Continue checking the queue
-    if not progress_queue.empty():
-        root.after(100, lambda: check_queue(progress_queue, num_simulations, result_text, run_button))
-    else:
-        # Check if the thread is still running
-        if run_button['state'] == 'disabled':
-            root.after(100, lambda: check_queue(progress_queue, num_simulations, result_text, run_button))
-
-    # Disable stop button when simulation is done
-    if run_button['state'] == 'disabled':
-        root.after(100, lambda: check_queue(progress_queue, num_simulations, result_text, run_button))
-    else:
-        stop_button.config(state='disabled')
-
+    # Schedule the next queue check
+    root.after(100, lambda: check_queue(progress_queue, num_simulations, result_text, run_button))
 
 # Function to reset the slider
 def reset_slider():
