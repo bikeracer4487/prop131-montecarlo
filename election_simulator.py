@@ -2,14 +2,14 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import threading
 import random
+from queue import Queue
 
 # Constants for candidate types
 CANDIDATE_TYPES = ["All Extreme", "All Moderate", "Even Mix"]
 
-# Historical Probability Estimates (Assumed Values)
+# Updated Voting Probabilities
 VOTING_PROBABILITIES = {
     'Red': {
         'Democrat': {
@@ -54,91 +54,152 @@ def generate_candidates(num, party, selection):
         candidates.append(Candidate(party, t))
     return candidates
 
-# Simulation Function
-def run_simulation(num_simulations, population_size, red_percentage, 
-                   num_republicans, rep_selection, num_democrats, dem_selection, 
-                   num_third_parties, progress_callback):
-    
-    results = {}
-    for sim in range(1, num_simulations + 1):
-        # Update progress
-        if sim % (num_simulations // 100) == 0:
-            progress_callback(sim / num_simulations * 100)
-
-        # Generate candidates
-        candidates = []
-        candidates += generate_candidates(num_republicans, 'Republican', rep_selection)
-        candidates += generate_candidates(num_democrats, 'Democrat', dem_selection)
-        candidates += generate_candidates(num_third_parties, 'Third Party', 'Even Mix')  # Assuming 3rd parties are always even mix
-
-        # If no candidates, skip
-        if not candidates:
-            continue
-
-        # Initialize vote counts
-        vote_counts = [0] * len(candidates)
-
-        # Simulate voting
-        for _ in range(population_size):
-            # Determine voter type
-            if random.random() < red_percentage:
-                voter_type = 'Red'
-            else:
-                voter_type = 'Blue'
-            
-            # Select a candidate to vote for
-            vote = select_vote(voter_type, candidates)
-            if vote is not None:
-                vote_counts[vote] += 1
-
-        # Determine top 4 candidates
-        top_indices = np.argsort(vote_counts)[-4:]
-        top_parties = [candidates[i].party for i in top_indices]
-        top_parties_sorted = sorted(top_parties, key=lambda x: x)  # Sort for consistency
-
-        # Create outcome key
-        outcome = tuple(sorted(top_parties, key=lambda x: x))
-        results[outcome] = results.get(outcome, 0) + 1
-
-    return results
-
 # Function to select a vote based on voter type and candidates
-def select_vote(voter_type, candidates):
-    probabilities = []
-    for candidate in candidates:
-        if candidate.party == 'Republican':
-            if candidate.type == 'Extreme':
-                prob = VOTING_PROBABILITIES[voter_type]['Republican']['Extreme']
-            else:
-                prob = VOTING_PROBABILITIES[voter_type]['Republican']['Moderate']
-        elif candidate.party == 'Democrat':
-            if candidate.type == 'Extreme':
-                prob = VOTING_PROBABILITIES[voter_type]['Democrat']['Extreme']
-            else:
-                prob = VOTING_PROBABILITIES[voter_type]['Democrat']['Moderate']
-        else:  # Third Party
-            prob = VOTING_PROBABILITIES[voter_type]['Third Party']
-        probabilities.append(prob)
-    
-    total = sum(probabilities)
-    if total == 0:
-        return None  # No vote cast
+def select_vote_vectorized(voter_types, candidate_probs):
+    # voter_types: array of 'Red' or 'Blue'
+    # candidate_probs: dict with keys as candidate indices and values as probabilities
+    # Returns an array of vote counts per candidate
+    # This function is not used in the optimized version
+    pass
+
+# Simulation Function (Optimized)
+def run_simulation_optimized(num_simulations, population_size, red_percentage, 
+                             num_republicans, rep_selection, num_democrats, dem_selection, 
+                             num_third_parties, progress_queue, stop_flag):
+    # Generate candidates
+    candidates = []
+    candidates += generate_candidates(num_republicans, 'Republican', rep_selection)
+    candidates += generate_candidates(num_democrats, 'Democrat', dem_selection)
+    candidates += generate_candidates(num_third_parties, 'Third Party', 'Even Mix')  # Assuming 3rd parties are always even mix
+
+    if not candidates:
+        progress_queue.put("error: No candidates to simulate.")
+        return
+
+    num_candidates = len(candidates)
+
+    # Precompute candidate voting probabilities for Red and Blue voters
+    candidate_probs_red = np.array([
+        VOTING_PROBABILITIES['Red'][candidate.party][candidate.type] 
+        if candidate.party != 'Third Party' else VOTING_PROBABILITIES['Red']['Third Party']
+        for candidate in candidates
+    ])
+    candidate_probs_blue = np.array([
+        VOTING_PROBABILITIES['Blue'][candidate.party][candidate.type] 
+        if candidate.party != 'Third Party' else VOTING_PROBABILITIES['Blue']['Third Party']
+        for candidate in candidates
+    ])
 
     # Normalize probabilities
-    probabilities = [p / total for p in probabilities]
-    return np.random.choice(len(candidates), p=probabilities)
+    candidate_probs_red /= candidate_probs_red.sum()
+    candidate_probs_blue /= candidate_probs_blue.sum()
 
-# Function to update the progress bar
-def update_progress(progress_var, value):
-    progress_var.set(value)
+    results = {}
+
+    # Process simulations in batches to manage memory
+    batch_size = 1000  # Adjust batch size as needed
+    num_batches = (num_simulations + batch_size - 1) // batch_size
+
+    for batch_idx in range(num_batches):
+        if stop_flag.is_set():
+            progress_queue.put("cancelled")
+            return
+
+        current_batch_size = min(batch_size, num_simulations - batch_idx * batch_size)
+
+        # Generate voter types
+        voter_types = np.random.choice(
+            ['Red', 'Blue'],
+            size=(current_batch_size, population_size),
+            p=[red_percentage, 1 - red_percentage]
+        )
+
+        # Initialize vote counts for each simulation in the batch
+        vote_counts = np.zeros((current_batch_size, num_candidates), dtype=int)
+
+        # Simulate votes
+        for i in range(current_batch_size):
+            if stop_flag.is_set():
+                progress_queue.put("cancelled")
+                return
+
+            # For each voter type, select candidates based on probabilities
+            voter_type_counts = np.unique(voter_types[i], return_counts=True)
+            counts = dict(zip(voter_type_counts[0], voter_type_counts[1]))
+
+            # Red voters
+            num_red_voters = counts.get('Red', 0)
+            if num_red_voters > 0:
+                votes_red = np.random.choice(
+                    num_candidates,
+                    size=num_red_voters,
+                    p=candidate_probs_red
+                )
+                vote_counts[i] += np.bincount(votes_red, minlength=num_candidates)
+
+            # Blue voters
+            num_blue_voters = counts.get('Blue', 0)
+            if num_blue_voters > 0:
+                votes_blue = np.random.choice(
+                    num_candidates,
+                    size=num_blue_voters,
+                    p=candidate_probs_blue
+                )
+                vote_counts[i] += np.bincount(votes_blue, minlength=num_candidates)
+
+        # Determine top 4 candidates for each simulation
+        for i in range(current_batch_size):
+            if stop_flag.is_set():
+                progress_queue.put("cancelled")
+                return
+
+            top_indices = np.argsort(vote_counts[i])[-4:]
+            top_parties = [candidates[idx].party for idx in top_indices]
+            # Count the number of candidates from each party
+            party_counts = {}
+            for party in set(top_parties):
+                party_counts[party] = top_parties.count(party)
+            # Create a sorted tuple for consistent keys
+            outcome = tuple(sorted(party_counts.items(), key=lambda x: (-x[1], x[0])))
+            results[outcome] = results.get(outcome, 0) + 1
+
+        # Update progress
+        progress = ((batch_idx + 1) * current_batch_size) / num_simulations * 100
+        progress_queue.put(progress)
+        print(f"Progress: {progress:.2f}%")
+
+    progress_queue.put("done")
+    progress_queue.put(results)
 
 # Function to handle the simulation in a separate thread
+def simulate(num_simulations, population_size, red_percentage, 
+             num_republicans, rep_selection, num_democrats, dem_selection, 
+             num_third_parties, progress_queue, stop_flag):
+    # Call the simulation function with the stop_flag
+    run_simulation_optimized(
+        num_simulations=num_simulations,
+        population_size=population_size,
+        red_percentage=red_percentage,
+        num_republicans=num_republicans,
+        rep_selection=rep_selection,
+        num_democrats=num_democrats,
+        dem_selection=dem_selection,
+        num_third_parties=num_third_parties,
+        progress_queue=progress_queue,
+        stop_flag=stop_flag
+    )
+
+# Function to start the simulation
 def start_simulation():
+    # Reset the stop flag
+    stop_flag.clear()
+    # Enable the Stop button
+    stop_button.config(state='normal')
+
     try:
         num_simulations = int(entry_num_simulations.get())
         population_size = int(entry_population_size.get())
         red_percentage = red_slider.get() / 100.0
-        blue_percentage = 1 - red_percentage
 
         num_republicans = int(repub_var.get())
         rep_selection = rep_type_var.get()
@@ -148,55 +209,100 @@ def start_simulation():
 
         num_third_parties = int(tp_var.get())
 
+        if num_simulations <= 0 or population_size <= 0:
+            messagebox.showerror("Input Error", "Number of simulations and population size must be positive integers.")
+            return
+
+        if num_simulations > 1000000:
+            if not messagebox.askyesno("Large Number of Simulations", 
+                "Running a very large number of simulations may take considerable time and resources. Do you want to continue?"):
+                return
+
         # Disable the run button
         run_button.config(state='disabled')
 
         # Clear previous results
         result_text.delete(1.0, tk.END)
 
+        # Reset progress bar
+        progress_var.set(0)
+
+        # Create a queue to receive progress updates
+        progress_queue = Queue()
+
         # Start simulation in a new thread
         simulation_thread = threading.Thread(target=simulate, args=(
             num_simulations, population_size, red_percentage, 
             num_republicans, rep_selection, num_democrats, dem_selection, 
-            num_third_parties, progress_var, result_text, run_button))
+            num_third_parties, progress_queue, stop_flag))
         simulation_thread.start()
+
+        # Start monitoring the queue
+        root.after(100, lambda: check_queue(progress_queue, num_simulations, result_text, run_button))
+
     except ValueError:
         messagebox.showerror("Input Error", "Please enter valid numerical values.")
 
-def simulate(num_simulations, population_size, red_percentage, 
-             num_republicans, rep_selection, num_democrats, dem_selection, 
-             num_third_parties, progress_var, result_text, run_button):
-    
-    results = run_simulation(
-        num_simulations=num_simulations,
-        population_size=population_size,
-        red_percentage=red_percentage,
-        num_republicans=num_republicans,
-        rep_selection=rep_selection,
-        num_democrats=num_democrats,
-        dem_selection=dem_selection,
-        num_third_parties=num_third_parties,
-        progress_callback=lambda x: update_progress(progress_var, x)
-    )
+# Function to check the queue for progress updates
+def check_queue(progress_queue, num_simulations, result_text, run_button):
+    try:
+        while not progress_queue.empty():
+            msg = progress_queue.get_nowait()
+            if isinstance(msg, float):
+                progress_var.set(msg)
+            elif isinstance(msg, str) and msg.startswith("error"):
+                messagebox.showerror("Simulation Error", msg)
+                run_button.config(state='normal')
+                return
+            elif msg == "done":
+                continue
+            elif msg == "cancelled":
+                result_text.insert(tk.END, "Simulation cancelled by user.\n")
+                run_button.config(state='normal')
+                stop_button.config(state='disabled')
+                return
+            elif isinstance(msg, dict):
+                # Simulation complete, process results
+                results = msg
+                # Calculate probabilities
+                df_results = pd.DataFrame.from_dict(results, orient='index').reset_index()
+                df_results.columns = ['Outcome', 'Count']
+                df_results['Probability (%)'] = (df_results['Count'] / num_simulations) * 100
+                df_results = df_results.sort_values(by='Probability (%)', ascending=False)
 
-    # Calculate probabilities
-    df_results = pd.DataFrame.from_dict(results, orient='index').reset_index()
-    df_results.columns = ['Outcome', 'Count']
-    df_results['Probability (%)'] = (df_results['Count'] / num_simulations) * 100
-    df_results = df_results.sort_values(by='Probability (%)', ascending=False)
+                # Prepare results string
+                result_str = ""
+                for _, row in df_results.iterrows():
+                    outcome = row['Outcome']
+                    # Format outcome
+                    outcome_str = ', '.join([f"{count} {party}" + ("s" if count > 1 else "") for party, count in outcome])
+                    probability = f"{row['Probability (%)']:.2f}%"
+                    result_str += f"{outcome_str}: {probability}\n"
 
-    # Prepare results string
-    result_str = ""
-    for _, row in df_results.iterrows():
-        outcome = ', '.join(row['Outcome'])
-        probability = f"{row['Probability (%)']:.2f}%"
-        result_str += f"{outcome}: {probability}\n"
+                # Update the result_text widget
+                result_text.insert(tk.END, result_str)
 
-    # Update the result_text widget
-    result_text.insert(tk.END, result_str)
+                # Re-enable the run button
+                run_button.config(state='normal')
+    except Exception as e:
+        messagebox.showerror("Error", f"An unexpected error occurred: {e}")
+        run_button.config(state='normal')
+        return
 
-    # Re-enable the run button
-    run_button.config(state='normal')
+    # Continue checking the queue
+    if not progress_queue.empty():
+        root.after(100, lambda: check_queue(progress_queue, num_simulations, result_text, run_button))
+    else:
+        # Check if the thread is still running
+        if run_button['state'] == 'disabled':
+            root.after(100, lambda: check_queue(progress_queue, num_simulations, result_text, run_button))
+
+    # Disable stop button when simulation is done
+    if run_button['state'] == 'disabled':
+        root.after(100, lambda: check_queue(progress_queue, num_simulations, result_text, run_button))
+    else:
+        stop_button.config(state='disabled')
+
 
 # Function to reset the slider
 def reset_slider():
@@ -213,7 +319,7 @@ input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 # 1. Number of simulated elections
 ttk.Label(input_frame, text="Number of Simulated Elections:").grid(row=0, column=0, sticky=tk.W, pady=5)
 entry_num_simulations = ttk.Entry(input_frame)
-entry_num_simulations.insert(0, "1000000")
+entry_num_simulations.insert(0, "100000")
 entry_num_simulations.grid(row=0, column=1, pady=5)
 
 # 2. Size of voting population
@@ -265,7 +371,7 @@ rep_type_dropdown['values'] = CANDIDATE_TYPES
 rep_type_dropdown.current(0)
 rep_type_dropdown.grid(row=4, column=1, pady=5)
 
-# 4. Number and type of Democrat candidates
+# 5. Number and type of Democrat candidates
 ttk.Label(input_frame, text="Number of Democrat Candidates:").grid(row=5, column=0, sticky=tk.W, pady=5)
 dem_var = tk.StringVar()
 dem_dropdown = ttk.Combobox(input_frame, textvariable=dem_var, state='readonly')
@@ -280,7 +386,7 @@ dem_type_dropdown['values'] = CANDIDATE_TYPES
 dem_type_dropdown.current(0)
 dem_type_dropdown.grid(row=6, column=1, pady=5)
 
-# 5. Number of 3rd Party Candidates
+# 6. Number of 3rd Party Candidates
 ttk.Label(input_frame, text="Number of 3rd Party Candidates:").grid(row=7, column=0, sticky=tk.W, pady=5)
 tp_var = tk.StringVar()
 tp_dropdown = ttk.Combobox(input_frame, textvariable=tp_var, state='readonly')
@@ -293,9 +399,24 @@ progress_var = tk.DoubleVar()
 progress_bar = ttk.Progressbar(root, variable=progress_var, maximum=100, length=400)
 progress_bar.grid(row=1, column=0, padx=10, pady=10)
 
+# Global stop flag
+stop_flag = threading.Event()
+
+# Function to stop the simulation
+def stop_simulation():
+    stop_flag.set()
+
+# Run and Stop Buttons Frame
+buttons_frame = ttk.Frame(root)
+buttons_frame.grid(row=2, column=0, padx=10, pady=10)
+
 # Run Elections Button
-run_button = ttk.Button(root, text="Run Elections", command=start_simulation)
-run_button.grid(row=2, column=0, padx=10, pady=10)
+run_button = ttk.Button(buttons_frame, text="Run Elections", command=start_simulation)
+run_button.pack(side=tk.LEFT, padx=5)
+
+# Stop Simulation Button
+stop_button = ttk.Button(buttons_frame, text="Cancel Simulation", command=stop_simulation, state='disabled')
+stop_button.pack(side=tk.LEFT, padx=5)
 
 # Results Display
 ttk.Label(root, text="Simulation Results:").grid(row=3, column=0, sticky=tk.W, padx=10)
