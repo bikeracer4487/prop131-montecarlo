@@ -204,8 +204,8 @@ def start_simulation():
     stop_button.config(state='normal')
 
     try:
-        num_simulations = int(entry_num_simulations.get())
-        population_size = int(entry_population_size.get())
+        num_simulations = int(num_simulations_var.get())
+        population_size = int(population_size_var.get())
         red_percentage = red_slider.get() / 100.0
 
         num_republicans = int(repub_var.get())
@@ -318,17 +318,21 @@ root.title("Election Monte Carlo Simulator")
 input_frame = ttk.Frame(root, padding="10")
 input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-# 1. Number of simulated elections
+# 1. Number of Simulated Elections (Dropdown)
 ttk.Label(input_frame, text="Number of Simulated Elections:").grid(row=0, column=0, sticky=tk.W, pady=5)
-entry_num_simulations = ttk.Entry(input_frame)
-entry_num_simulations.insert(0, "100000")
-entry_num_simulations.grid(row=0, column=1, pady=5)
+num_simulations_var = tk.StringVar()
+num_simulations_dropdown = ttk.Combobox(input_frame, textvariable=num_simulations_var, state='readonly')
+num_simulations_dropdown['values'] = ["500", "1000", "5000", "10000", "50000", "100000"]
+num_simulations_dropdown.current(3)  # Set "10000" as default
+num_simulations_dropdown.grid(row=0, column=1, pady=5)
 
-# 2. Size of voting population
+# 2. Size of Voting Population (Dropdown)
 ttk.Label(input_frame, text="Size of Voting Population:").grid(row=1, column=0, sticky=tk.W, pady=5)
-entry_population_size = ttk.Entry(input_frame)
-entry_population_size.insert(0, "10000")
-entry_population_size.grid(row=1, column=1, pady=5)
+population_size_var = tk.StringVar()
+population_size_dropdown = ttk.Combobox(input_frame, textvariable=population_size_var, state='readonly')
+population_size_dropdown['values'] = ["50", "100", "500", "1000", "5000", "10000"]
+population_size_dropdown.current(3)  # Set "1000" as default
+population_size_dropdown.grid(row=1, column=1, pady=5)
 
 # 3. Distribution slider
 ttk.Label(input_frame, text="Distribution of Voting Electorate:").grid(row=2, column=0, sticky=tk.W, pady=5)
