@@ -7,8 +7,6 @@ import random
 from queue import Queue
 import sys
 import os
-import ttkbootstrap as ttkb
-from ttkbootstrap.constants import *
 import customtkinter as cstk
 
 cstk.set_appearance_mode("dark")
