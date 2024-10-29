@@ -107,112 +107,135 @@ def run_simulation_optimized(num_simulations, population_size, red_percentage,
 
     num_candidates = len(candidates)
 
-    # Adjust candidate probabilities with decay functions
-    candidate_probs_red = []
-    candidate_probs_blue = []
+    # Initialize candidate probabilities
+    candidate_probs_red = [0.0] * len(candidates)
+    candidate_probs_blue = [0.0] * len(candidates)
 
-    # Group candidates by party and type for applying decay functions
-    party_type_groups = {}
-    for idx, candidate in enumerate(candidates):
-        key = (candidate.party, candidate.type)
-        if key not in party_type_groups:
-            party_type_groups[key] = []
-        party_type_groups[key].append((idx, candidate))
+    # Map candidate index to candidate object for easy access
+    candidate_index_map = {idx: candidate for idx, candidate in enumerate(candidates)}
 
-    for key, group in party_type_groups.items():
-        party, type_ = key
-        n = len(group)
-        
-        # Determine if funding disparity applies
-        if party == 'Republican':
-            if rep_heavy_funding_var.get():
-                decay_function = quadratic_decay
-            elif rep_funding_var.get():
-                decay_function = linear_decay
-            else:
-                decay_function = None
-        elif party == 'Democrat':
-            if dem_heavy_funding_var.get():
-                decay_function = quadratic_decay
-            elif dem_funding_var.get():
-                decay_function = linear_decay
-            else:
-                decay_function = None
-        else:
-            decay_function = None  # No funding disparity for Third Party candidates
-        
-        # Get base probabilities for this group
-        if party != 'Third Party':
-            base_prob_red = VOTING_PROBABILITIES['Red'][party][type_]
-            base_prob_blue = VOTING_PROBABILITIES['Blue'][party][type_]
-        else:
-            base_prob_red = VOTING_PROBABILITIES['Red']['Third Party']
-            base_prob_blue = VOTING_PROBABILITIES['Blue']['Third Party']
-        
-        # Compute decay factors
-        decay_factors = []
-        for k in range(1, n+1):
-            if decay_function and n > 1:
-                decay_factor = decay_function(n, k)
-            else:
-                decay_factor = 1.0 / n
-            decay_factors.append(decay_factor)
-        
-        # Ensure the decay factors sum to 1 (they should by definition)
-        sum_decay_factors = sum(decay_factors)
-        
-        # Adjusted probabilities for each candidate
-        for idx_in_group, (idx, candidate) in enumerate(group):
-            decay_factor = decay_factors[idx_in_group]
-            # For Red voters
-            candidate_probs_red.append(base_prob_red * (decay_factor / sum_decay_factors))
-            # For Blue voters
-            candidate_probs_blue.append(base_prob_blue * (decay_factor / sum_decay_factors))
+    # For each voter type (Red and Blue)
+    for voter_type in ['Red', 'Blue']:
+        voter_probs = VOTING_PROBABILITIES[voter_type]
 
-    candidate_probs_red = np.array(candidate_probs_red)
-    candidate_probs_blue = np.array(candidate_probs_blue)
+        # For Third Party candidates (treated the same for both voter types)
+        tp_candidates = [(idx, c) for idx, c in enumerate(candidates) if c.party == 'Third Party']
+        num_tp_candidates = len(tp_candidates)
+        if num_tp_candidates > 0:
+            base_prob = voter_probs['Third Party']
+            prob_per_candidate = base_prob / num_tp_candidates
+            for idx, candidate in tp_candidates:
+                if voter_type == 'Red':
+                    candidate_probs_red[idx] = prob_per_candidate
+                else:
+                    candidate_probs_blue[idx] = prob_per_candidate
+
+        # For Republican and Democrat candidates
+        for party in ['Republican', 'Democrat']:
+            party_candidates = [(idx, c) for idx, c in enumerate(candidates) if c.party == party]
+            if not party_candidates:
+                continue
+
+            # Determine if voter is same party
+            is_same_party = (voter_type == 'Red' and party == 'Republican') or (voter_type == 'Blue' and party == 'Democrat')
+
+            if is_same_party:
+                # Combine all candidates of this party into one group
+                group_candidates = party_candidates
+                n = len(group_candidates)
+                # Base probability is the sum of base probabilities for extreme and moderate types
+                base_prob_extreme = voter_probs[party]['Extreme']
+                base_prob_moderate = voter_probs[party]['Moderate']
+                total_base_prob = base_prob_extreme + base_prob_moderate
+                # Determine if funding disparity applies
+                if party == 'Republican':
+                    if rep_heavy_funding_var.get():
+                        decay_function = quadratic_decay
+                    elif rep_funding_var.get():
+                        decay_function = linear_decay
+                    else:
+                        decay_function = None
+                elif party == 'Democrat':
+                    if dem_heavy_funding_var.get():
+                        decay_function = quadratic_decay
+                    elif dem_funding_var.get():
+                        decay_function = linear_decay
+                    else:
+                        decay_function = None
+                # Compute decay factors
+                decay_factors = []
+                if decay_function and n > 1:
+                    for k in range(1, n + 1):
+                        decay_factor = decay_function(n, k)
+                        decay_factors.append(decay_factor)
+                else:
+                    decay_factors = [1.0] * n
+                # Normalize decay factors
+                sum_decay_factors = sum(decay_factors)
+                normalized_decay_factors = [df / sum_decay_factors for df in decay_factors]
+                # Multiply total base probability by decay factors and assign to candidates
+                for (idx, candidate), decay_factor in zip(group_candidates, normalized_decay_factors):
+                    prob = total_base_prob * decay_factor
+                    if voter_type == 'Red':
+                        candidate_probs_red[idx] = prob
+                    else:
+                        candidate_probs_blue[idx] = prob
+            else:
+                # Opposite-party candidates are grouped by type (Extreme and Moderate separately)
+                candidate_types = set(c.type for idx, c in party_candidates)
+                for type_ in candidate_types:
+                    group_candidates = [(idx, c) for idx, c in party_candidates if c.type == type_]
+                    n = len(group_candidates)
+                    # Get base probability for this group
+                    base_prob = voter_probs[party][type_]
+                    # Determine if funding disparity applies
+                    if party == 'Republican':
+                        if rep_heavy_funding_var.get():
+                            decay_function = quadratic_decay
+                        elif rep_funding_var.get():
+                            decay_function = linear_decay
+                        else:
+                            decay_function = None
+                    elif party == 'Democrat':
+                        if dem_heavy_funding_var.get():
+                            decay_function = quadratic_decay
+                        elif dem_funding_var.get():
+                            decay_function = linear_decay
+                        else:
+                            decay_function = None
+                    # Compute decay factors
+                    decay_factors = []
+                    if decay_function and n > 1:
+                        for k in range(1, n + 1):
+                            decay_factor = decay_function(n, k)
+                            decay_factors.append(decay_factor)
+                    else:
+                        decay_factors = [1.0] * n
+                    # Normalize decay factors
+                    sum_decay_factors = sum(decay_factors)
+                    normalized_decay_factors = [df / sum_decay_factors for df in decay_factors]
+                    # Multiply base probability by decay factors and assign to candidates
+                    for (idx, candidate), decay_factor in zip(group_candidates, normalized_decay_factors):
+                        prob = base_prob * decay_factor
+                        if voter_type == 'Red':
+                            candidate_probs_red[idx] = prob
+                        else:
+                            candidate_probs_blue[idx] = prob
 
     # ======= Pre-Normalization Logging =======
-    print("\n--- Candidate Voting Probabilities (Pre-Normalization) ---")
+    print("\n--- Candidate Voting Probabilities ---")
     for idx, candidate in enumerate(candidates):
-        # Create a unique candidate name using index_within_group
         party_abbr = {
             'Republican': 'Rep',
             'Democrat': 'Dem',
             'Third Party': 'TP'
         }.get(candidate.party, 'Other')
         candidate_name = f"{party_abbr}.Cand.{candidate.type}.{candidate.index_within_group}"
-        # Get the pre-normalized probabilities
-        if candidate.party != 'Third Party':
-            prob_red_pre_norm = VOTING_PROBABILITIES['Red'][candidate.party][candidate.type]
-            prob_blue_pre_norm = VOTING_PROBABILITIES['Blue'][candidate.party][candidate.type]
-        else:
-            prob_red_pre_norm = VOTING_PROBABILITIES['Red']['Third Party']
-            prob_blue_pre_norm = VOTING_PROBABILITIES['Blue']['Third Party']
-        print(f"{candidate_name} = Blue {prob_blue_pre_norm:.2f}, Red {prob_red_pre_norm:.2f}")
-    print("--- End of Pre-Normalization Probabilities ---\n")
+        prob_red = candidate_probs_red[idx]
+        prob_blue = candidate_probs_blue[idx]
+        print(f"{candidate_name} = Blue {prob_blue:.3f}, Red {prob_red:.3f}")
+    print("--- End of Probabilities ---\n")
     # ======= Pre-Normalization Logging =======
-
-    # Normalize probabilities
-    candidate_probs_red /= candidate_probs_red.sum()
-    candidate_probs_blue /= candidate_probs_blue.sum()
-
-    # ======= Post-Normalization Logging =======
-    print("\n--- Candidate Voting Probabilities (Post-Normalization) ---")
-    for idx, candidate in enumerate(candidates):
-        # Use index_within_group in candidate name
-        party_abbr = {
-            'Republican': 'Rep',
-            'Democrat': 'Dem',
-            'Third Party': 'TP'
-        }.get(candidate.party, 'Other')
-        candidate_name = f"{party_abbr}.Cand.{candidate.type}.{candidate.index_within_group}"
-        # Get the normalized probabilities
-        prob_red_norm = candidate_probs_red[idx]
-        prob_blue_norm = candidate_probs_blue[idx]
-        print(f"{candidate_name} = Blue {prob_blue_norm:.4f}, Red {prob_red_norm:.4f}")
-    print("--- End of Post-Normalization Probabilities ---\n")
-    # ======= Post-Normalization Logging =======
 
     results = {}
 
