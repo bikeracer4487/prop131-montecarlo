@@ -1,6 +1,6 @@
 # Election Monte Carlo Simulator
 
-Welcome to the **Election Monte Carlo Simulator**, a powerful and user-friendly tool designed to simulate election outcomes based on various configurable parameters. Whether you're a political analyst, educator, or enthusiast, this simulator provides valuable insights into how different factors can influence election results.
+Welcome to the **Proposition 131 Primary Monte Carlo Simulator**, a powerful and user-friendly tool designed to simulate primary outcomes under Prop 131 based on various configurable parameters. Whether you're a political analyst, educator, or enthusiast, this simulator provides valuable insights into how different factors might influence primary results under Prop 131.
 
 ## Understanding the Interface
 
