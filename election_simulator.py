@@ -118,11 +118,41 @@ def run_simulation_optimized(num_simulations, population_size, red_percentage,
     for voter_type in ['Red', 'Blue']:
         voter_probs = VOTING_PROBABILITIES[voter_type]
 
-        # For Third Party candidates (treated the same for both voter types)
+        # Parties with candidates
+        parties_with_candidates = set(c.party for c in candidates)
+        
+        # Calculate total available base probability for the voter type
+        total_available_base_prob = 0.0
+        
+        # Calculate base probabilities for parties with candidates
+        party_base_probs = {}
+        for party in parties_with_candidates:
+            if party == 'Third Party':
+                total_available_base_prob += voter_probs['Third Party']
+                party_base_probs[party] = voter_probs['Third Party']
+            else:
+                # Determine candidate types present for the party
+                candidate_types_in_party = set(c.type for c in candidates if c.party == party)
+                base_prob = sum([voter_probs[party][ctype] for ctype in candidate_types_in_party])
+                print(f"{voter_type}.{party} base_prob = {base_prob}")
+                total_available_base_prob += base_prob
+                party_base_probs[party] = base_prob
+        
+        # Calculate adjustment factor
+        adjustment_factor = 1.0 / total_available_base_prob
+        print(f"{voter_type} total_available_base_prob  = {total_available_base_prob:.3f}\n")
+        print(f"{voter_type} adjustment_factor  = {adjustment_factor:.3f}\n")
+
+        # Adjust base probabilities
+        for party in party_base_probs:
+            party_base_probs[party] *= adjustment_factor
+
+        # Proceed with candidate probability calculations
+        # For Third Party candidates
         tp_candidates = [(idx, c) for idx, c in enumerate(candidates) if c.party == 'Third Party']
         num_tp_candidates = len(tp_candidates)
         if num_tp_candidates > 0:
-            base_prob = voter_probs['Third Party']
+            base_prob = party_base_probs['Third Party']
             prob_per_candidate = base_prob / num_tp_candidates
             for idx, candidate in tp_candidates:
                 if voter_type == 'Red':
@@ -132,9 +162,9 @@ def run_simulation_optimized(num_simulations, population_size, red_percentage,
 
         # For Republican and Democrat candidates
         for party in ['Republican', 'Democrat']:
-            party_candidates = [(idx, c) for idx, c in enumerate(candidates) if c.party == party]
-            if not party_candidates:
+            if party not in parties_with_candidates:
                 continue
+            party_candidates = [(idx, c) for idx, c in enumerate(candidates) if c.party == party]
 
             # Determine if voter is same party
             is_same_party = (voter_type == 'Red' and party == 'Republican') or (voter_type == 'Blue' and party == 'Democrat')
@@ -143,10 +173,10 @@ def run_simulation_optimized(num_simulations, population_size, red_percentage,
                 # Combine all candidates of this party into one group
                 group_candidates = party_candidates
                 n = len(group_candidates)
-                # Base probability is the sum of base probabilities for extreme and moderate types
-                base_prob_extreme = voter_probs[party]['Extreme']
-                base_prob_moderate = voter_probs[party]['Moderate']
-                total_base_prob = base_prob_extreme + base_prob_moderate
+                # Determine candidate types present in the group
+                candidate_types_in_group = set(c.type for idx, c in group_candidates)
+                # Sum adjusted base probabilities for the candidate types present
+                total_base_prob = sum([voter_probs[party][ctype] for ctype in candidate_types_in_group]) * adjustment_factor
                 # Determine if funding disparity applies
                 if party == 'Republican':
                     if rep_heavy_funding_var.get():
@@ -186,8 +216,8 @@ def run_simulation_optimized(num_simulations, population_size, red_percentage,
                 for type_ in candidate_types:
                     group_candidates = [(idx, c) for idx, c in party_candidates if c.type == type_]
                     n = len(group_candidates)
-                    # Get base probability for this group
-                    base_prob = voter_probs[party][type_]
+                    # Get adjusted base probability for this group
+                    base_prob = voter_probs[party][type_] * adjustment_factor
                     # Determine if funding disparity applies
                     if party == 'Republican':
                         if rep_heavy_funding_var.get():
@@ -221,6 +251,19 @@ def run_simulation_optimized(num_simulations, population_size, red_percentage,
                             candidate_probs_red[idx] = prob
                         else:
                             candidate_probs_blue[idx] = prob
+
+    # Verify that probabilities sum to 1
+    total_prob_red = sum(candidate_probs_red)
+    total_prob_blue = sum(candidate_probs_blue)
+
+    if not np.isclose(total_prob_red, 1.0):
+        progress_queue.put(f"error: probabilities for Red voters do not sum to 1 (sum={total_prob_red})")
+        return
+    if not np.isclose(total_prob_blue, 1.0):
+        progress_queue.put(f"error: probabilities for Blue voters do not sum to 1 (sum={total_prob_blue})")
+        return
+
+
 
     # ======= Pre-Normalization Logging =======
     print("\n--- Candidate Voting Probabilities ---")
