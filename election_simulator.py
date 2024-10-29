@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, BooleanVar
 import numpy as np
 import pandas as pd
 import threading
@@ -50,9 +50,10 @@ VOTING_PROBABILITIES = {
 
 # Define Candidate class
 class Candidate:
-    def __init__(self, party, type_):
+    def __init__(self, party, type_, index_within_group):
         self.party = party
         self.type = type_
+        self.index_within_group = index_within_group
 
 # Function to generate candidates based on type
 def generate_candidates(num, party, selection):
@@ -63,9 +64,21 @@ def generate_candidates(num, party, selection):
         types = ["Moderate"] * num
     elif selection == "Even Mix":
         types = ["Extreme" if i % 2 == 0 else "Moderate" for i in range(num)]
+    
+    # Group candidates by type
+    type_indices = {'Extreme': 1, 'Moderate': 1}
     for t in types:
-        candidates.append(Candidate(party, t))
+        idx = type_indices[t]
+        candidates.append(Candidate(party, t, idx))
+        type_indices[t] += 1
     return candidates
+
+def linear_decay(n, k):
+    return (2 * (n - k + 1)) / (n * (n + 1))
+
+def quadratic_decay(n, k):
+    normalization_factor = sum((n - j + 1) ** 2 for j in range(1, n + 1))
+    return (n - k + 1) ** 2 / normalization_factor
 
 # Function to select a vote based on voter type and candidates
 def select_vote_vectorized(voter_types, candidate_probs):
@@ -85,27 +98,121 @@ def run_simulation_optimized(num_simulations, population_size, red_percentage,
     candidates += generate_candidates(num_democrats, 'Democrat', dem_selection)
     candidates += generate_candidates(num_third_parties, 'Third Party', 'Even Mix')  # Assuming 3rd parties are always even mix
 
+    # Dictionary to keep track of candidate counts per party and type
+    party_type_counts = {}
+
     if not candidates:
         progress_queue.put("error: No candidates to simulate.")
         return
 
     num_candidates = len(candidates)
 
-    # Precompute candidate voting probabilities for Red and Blue voters
-    candidate_probs_red = np.array([
-        VOTING_PROBABILITIES['Red'][candidate.party][candidate.type] 
-        if candidate.party != 'Third Party' else VOTING_PROBABILITIES['Red']['Third Party']
-        for candidate in candidates
-    ])
-    candidate_probs_blue = np.array([
-        VOTING_PROBABILITIES['Blue'][candidate.party][candidate.type] 
-        if candidate.party != 'Third Party' else VOTING_PROBABILITIES['Blue']['Third Party']
-        for candidate in candidates
-    ])
+    # Adjust candidate probabilities with decay functions
+    candidate_probs_red = []
+    candidate_probs_blue = []
+
+    # Group candidates by party and type for applying decay functions
+    party_type_groups = {}
+    for idx, candidate in enumerate(candidates):
+        key = (candidate.party, candidate.type)
+        if key not in party_type_groups:
+            party_type_groups[key] = []
+        party_type_groups[key].append((idx, candidate))
+
+    for key, group in party_type_groups.items():
+        party, type_ = key
+        n = len(group)
+        
+        # Determine if funding disparity applies
+        if party == 'Republican':
+            if rep_heavy_funding_var.get():
+                decay_function = quadratic_decay
+            elif rep_funding_var.get():
+                decay_function = linear_decay
+            else:
+                decay_function = None
+        elif party == 'Democrat':
+            if dem_heavy_funding_var.get():
+                decay_function = quadratic_decay
+            elif dem_funding_var.get():
+                decay_function = linear_decay
+            else:
+                decay_function = None
+        else:
+            decay_function = None  # No funding disparity for Third Party candidates
+        
+        # Get base probabilities for this group
+        if party != 'Third Party':
+            base_prob_red = VOTING_PROBABILITIES['Red'][party][type_]
+            base_prob_blue = VOTING_PROBABILITIES['Blue'][party][type_]
+        else:
+            base_prob_red = VOTING_PROBABILITIES['Red']['Third Party']
+            base_prob_blue = VOTING_PROBABILITIES['Blue']['Third Party']
+        
+        # Compute decay factors
+        decay_factors = []
+        for k in range(1, n+1):
+            if decay_function and n > 1:
+                decay_factor = decay_function(n, k)
+            else:
+                decay_factor = 1.0 / n
+            decay_factors.append(decay_factor)
+        
+        # Ensure the decay factors sum to 1 (they should by definition)
+        sum_decay_factors = sum(decay_factors)
+        
+        # Adjusted probabilities for each candidate
+        for idx_in_group, (idx, candidate) in enumerate(group):
+            decay_factor = decay_factors[idx_in_group]
+            # For Red voters
+            candidate_probs_red.append(base_prob_red * (decay_factor / sum_decay_factors))
+            # For Blue voters
+            candidate_probs_blue.append(base_prob_blue * (decay_factor / sum_decay_factors))
+
+    candidate_probs_red = np.array(candidate_probs_red)
+    candidate_probs_blue = np.array(candidate_probs_blue)
+
+    # ======= Pre-Normalization Logging =======
+    print("\n--- Candidate Voting Probabilities (Pre-Normalization) ---")
+    for idx, candidate in enumerate(candidates):
+        # Create a unique candidate name using index_within_group
+        party_abbr = {
+            'Republican': 'Rep',
+            'Democrat': 'Dem',
+            'Third Party': 'TP'
+        }.get(candidate.party, 'Other')
+        candidate_name = f"{party_abbr}.Cand.{candidate.type}.{candidate.index_within_group}"
+        # Get the pre-normalized probabilities
+        if candidate.party != 'Third Party':
+            prob_red_pre_norm = VOTING_PROBABILITIES['Red'][candidate.party][candidate.type]
+            prob_blue_pre_norm = VOTING_PROBABILITIES['Blue'][candidate.party][candidate.type]
+        else:
+            prob_red_pre_norm = VOTING_PROBABILITIES['Red']['Third Party']
+            prob_blue_pre_norm = VOTING_PROBABILITIES['Blue']['Third Party']
+        print(f"{candidate_name} = Blue {prob_blue_pre_norm:.2f}, Red {prob_red_pre_norm:.2f}")
+    print("--- End of Pre-Normalization Probabilities ---\n")
+    # ======= Pre-Normalization Logging =======
 
     # Normalize probabilities
     candidate_probs_red /= candidate_probs_red.sum()
     candidate_probs_blue /= candidate_probs_blue.sum()
+
+    # ======= Post-Normalization Logging =======
+    print("\n--- Candidate Voting Probabilities (Post-Normalization) ---")
+    for idx, candidate in enumerate(candidates):
+        # Use index_within_group in candidate name
+        party_abbr = {
+            'Republican': 'Rep',
+            'Democrat': 'Dem',
+            'Third Party': 'TP'
+        }.get(candidate.party, 'Other')
+        candidate_name = f"{party_abbr}.Cand.{candidate.type}.{candidate.index_within_group}"
+        # Get the normalized probabilities
+        prob_red_norm = candidate_probs_red[idx]
+        prob_blue_norm = candidate_probs_blue[idx]
+        print(f"{candidate_name} = Blue {prob_blue_norm:.4f}, Red {prob_red_norm:.4f}")
+    print("--- End of Post-Normalization Probabilities ---\n")
+    # ======= Post-Normalization Logging =======
 
     results = {}
 
@@ -375,6 +482,14 @@ red_slider.bind("<ButtonRelease-1>", update_slider_label)
 reset_button = ttkb.Button(input_frame, text="Reset to 50/50", command=reset_slider)
 reset_button.grid(row=2, column=2, padx=10, pady=5)
 
+# Republican funding disparity variables
+rep_funding_var = BooleanVar(value=True)  # Assume funding disparity (checked by default)
+rep_heavy_funding_var = BooleanVar(value=False)  # Assume heavy funding disparity
+
+# Democrat funding disparity variables
+dem_funding_var = BooleanVar(value=True)  # Assume funding disparity (checked by default)
+dem_heavy_funding_var = BooleanVar(value=False)  # Assume heavy funding disparity
+
 # 4. Number and type of Republican candidates
 ttkb.Label(input_frame, text="Number of Republican Candidates:").grid(row=3, column=0, sticky=tk.W, pady=5)
 repub_var = tk.StringVar()
@@ -382,6 +497,16 @@ repub_dropdown = ttkb.Combobox(input_frame, textvariable=repub_var, state='reado
 repub_dropdown['values'] = [str(i) for i in range(0,7)]
 repub_dropdown.current(0)
 repub_dropdown.grid(row=3, column=1, pady=5)
+
+# Republican Candidates Funding Disparity Checkboxes
+rep_funding_check = ttkb.Checkbutton(input_frame, text="Assume funding disparity",
+                                     variable=rep_funding_var, onvalue=True, offvalue=False)
+rep_funding_check.grid(row=3, column=2, padx=5, pady=5, sticky=tk.W)
+
+rep_heavy_funding_check = ttkb.Checkbutton(input_frame, text="Assume heavy funding disparity",
+                                           variable=rep_heavy_funding_var, onvalue=True, offvalue=False,
+                                           command=lambda: toggle_funding('rep'))
+rep_heavy_funding_check.grid(row=3, column=3, padx=5, pady=5, sticky=tk.W)
 
 ttkb.Label(input_frame, text="Republican Candidate Type:").grid(row=4, column=0, sticky=tk.W, pady=5)
 rep_type_var = tk.StringVar()
@@ -398,12 +523,40 @@ dem_dropdown['values'] = [str(i) for i in range(0,7)]
 dem_dropdown.current(0)
 dem_dropdown.grid(row=5, column=1, pady=5)
 
+# Democrat Candidates Funding Disparity Checkboxes
+dem_funding_check = ttkb.Checkbutton(input_frame, text="Assume funding disparity",
+                                     variable=dem_funding_var, onvalue=True, offvalue=False)
+dem_funding_check.grid(row=5, column=2, padx=5, pady=5, sticky=tk.W)
+
+dem_heavy_funding_check = ttkb.Checkbutton(input_frame, text="Assume heavy funding disparity",
+                                           variable=dem_heavy_funding_var, onvalue=True, offvalue=False,
+                                           command=lambda: toggle_funding('dem'))
+dem_heavy_funding_check.grid(row=5, column=3, padx=5, pady=5, sticky=tk.W)
+
 ttkb.Label(input_frame, text="Democrat Candidate Type:").grid(row=6, column=0, sticky=tk.W, pady=5)
 dem_type_var = tk.StringVar()
 dem_type_dropdown = ttkb.Combobox(input_frame, textvariable=dem_type_var, state='readonly')
 dem_type_dropdown['values'] = CANDIDATE_TYPES
 dem_type_dropdown.current(0)
 dem_type_dropdown.grid(row=6, column=1, pady=5)
+
+def toggle_funding(party):
+    if party == 'rep':
+        if rep_heavy_funding_var.get():
+            rep_funding_var.set(True)
+            rep_funding_check.config(state='disabled')
+        else:
+            rep_funding_check.config(state='normal')
+    elif party == 'dem':
+        if dem_heavy_funding_var.get():
+            dem_funding_var.set(True)
+            dem_funding_check.config(state='disabled')
+        else:
+            dem_funding_check.config(state='normal')
+
+# Initially disable the "Assume funding disparity" checkboxes if "Assume heavy funding disparity" is checked
+toggle_funding('rep')
+toggle_funding('dem')
 
 # 6. Number of 3rd Party Candidates
 ttkb.Label(input_frame, text="Number of 3rd Party Candidates:").grid(row=7, column=0, sticky=tk.W, pady=5)
