@@ -29,6 +29,6 @@ fi
 
 echo "Starting the build process..."
 
-pyinstaller --onefile --windowed --name "ElectionSimulator" --icon=icon.icns --add-data "icon.png:." election_simulator.py
+pyinstaller --onedir --windowed --name "ElectionSimulator" --icon=icon.icns --add-data "icon.png:." election_simulator.py
 
 echo "Build process completed."

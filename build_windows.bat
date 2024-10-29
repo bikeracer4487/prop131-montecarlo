@@ -20,16 +20,16 @@ if exist dist (
 )
 
 REM Remove spec file if it exists
-if exist AnalyticsParser.spec (
-    del /f /q AnalyticsParser.spec
-    echo Removed 'AnalyticsParser.spec' file.
+if exist ElectionSimulator.spec (
+    del /f /q ElectionSimulator.spec
+    echo Removed 'ElectionSimulator.spec' file.
 ) else (
-    echo 'AnalyticsParser.spec' does not exist. Skipping.
+    echo 'ElectionSimulator.spec' does not exist. Skipping.
 )
 
 echo Starting the build process...
 
-pyinstaller --onefile --windowed --name "AnalyticsParser" --icon=icon.ico --add-data "icon.ico;." analytics_parser.py
+pyinstaller --onedir --windowed --name "ElectionSimulator" --icon=icon.ico --add-data "icon.ico;." election_simulator.py
 
 echo Build process completed.
 

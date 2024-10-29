@@ -2,8 +2,8 @@
 # === DMG Creation Script for MacOS ===
 
 # Set variables
-APP_NAME="AnalyticsParser.app"
-DMG_NAME="AnalyticsParser.dmg"
+APP_NAME="ElectionSimulator.app"
+DMG_NAME="ElectionSimulator.dmg"
 TEMP_DIR="dmg_source"
 ICON_PATH="icon.png"
 
@@ -45,7 +45,7 @@ fi
 echo "Creating DMG..."
 
 create-dmg \
-  --volname "AnalyticsParser" \
+  --volname "ElectionSimulator" \
   --volicon "icon.icns" \
   --codesign "Developer ID Application: Douglas Mason (3PAP25XR7L)" \
   --window-size 600 400 \

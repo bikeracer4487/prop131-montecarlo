@@ -328,33 +328,33 @@ root = ttkb.Window(themename="darkly")
 root.title("Election Monte Carlo Simulator")
 
 # Create a frame for inputs
-input_frame = ttk.Frame(root, padding="10")
+input_frame = ttkb.Frame(root, padding="10")
 input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
 # 1. Number of Simulated Elections (Dropdown)
-ttk.Label(input_frame, text="Number of Simulated Elections:").grid(row=0, column=0, sticky=tk.W, pady=5)
+ttkb.Label(input_frame, text="Number of Simulated Elections:").grid(row=0, column=0, sticky=tk.W, pady=5)
 num_simulations_var = tk.StringVar()
-num_simulations_dropdown = ttk.Combobox(input_frame, textvariable=num_simulations_var, state='readonly')
+num_simulations_dropdown = ttkb.Combobox(input_frame, textvariable=num_simulations_var, state='readonly')
 num_simulations_dropdown['values'] = ["500", "1000", "5000", "10000", "50000", "100000"]
 num_simulations_dropdown.current(3)  # Set "10000" as default
 num_simulations_dropdown.grid(row=0, column=1, pady=5)
 
 # 2. Size of Voting Population (Dropdown)
-ttk.Label(input_frame, text="Size of Voting Population:").grid(row=1, column=0, sticky=tk.W, pady=5)
+ttkb.Label(input_frame, text="Size of Voting Population:").grid(row=1, column=0, sticky=tk.W, pady=5)
 population_size_var = tk.StringVar()
-population_size_dropdown = ttk.Combobox(input_frame, textvariable=population_size_var, state='readonly')
+population_size_dropdown = ttkb.Combobox(input_frame, textvariable=population_size_var, state='readonly')
 population_size_dropdown['values'] = ["50", "100", "500", "1000", "5000", "10000"]
 population_size_dropdown.current(3)  # Set "1000" as default
 population_size_dropdown.grid(row=1, column=1, pady=5)
 
 # 3. Distribution slider
-ttk.Label(input_frame, text="Distribution of Voting Electorate:").grid(row=2, column=0, sticky=tk.W, pady=5)
-slider_frame = ttk.Frame(input_frame)
+ttkb.Label(input_frame, text="Distribution of Voting Electorate:").grid(row=2, column=0, sticky=tk.W, pady=5)
+slider_frame = ttkb.Frame(input_frame)
 slider_frame.grid(row=2, column=1, pady=5)
-red_slider = ttk.Scale(slider_frame, from_=0, to=100, orient=tk.HORIZONTAL, length=200)
+red_slider = ttkb.Scale(slider_frame, from_=0, to=100, orient=tk.HORIZONTAL, length=200)
 red_slider.set(50)
 red_slider.pack(side=tk.LEFT)
-slider_label = ttk.Label(slider_frame, text="50% Red")
+slider_label = ttkb.Label(slider_frame, text="50% Red")
 slider_label.pack(side=tk.LEFT, padx=10)
 
 def update_slider_label(event):
@@ -372,50 +372,50 @@ red_slider.bind("<Motion>", update_slider_label)
 red_slider.bind("<ButtonRelease-1>", update_slider_label)
 
 # Reset button for slider
-reset_button = ttk.Button(input_frame, text="Reset to 50/50", command=reset_slider)
+reset_button = ttkb.Button(input_frame, text="Reset to 50/50", command=reset_slider)
 reset_button.grid(row=2, column=2, padx=10, pady=5)
 
 # 4. Number and type of Republican candidates
-ttk.Label(input_frame, text="Number of Republican Candidates:").grid(row=3, column=0, sticky=tk.W, pady=5)
+ttkb.Label(input_frame, text="Number of Republican Candidates:").grid(row=3, column=0, sticky=tk.W, pady=5)
 repub_var = tk.StringVar()
-repub_dropdown = ttk.Combobox(input_frame, textvariable=repub_var, state='readonly')
+repub_dropdown = ttkb.Combobox(input_frame, textvariable=repub_var, state='readonly')
 repub_dropdown['values'] = [str(i) for i in range(0,7)]
 repub_dropdown.current(0)
 repub_dropdown.grid(row=3, column=1, pady=5)
 
-ttk.Label(input_frame, text="Republican Candidate Type:").grid(row=4, column=0, sticky=tk.W, pady=5)
+ttkb.Label(input_frame, text="Republican Candidate Type:").grid(row=4, column=0, sticky=tk.W, pady=5)
 rep_type_var = tk.StringVar()
-rep_type_dropdown = ttk.Combobox(input_frame, textvariable=rep_type_var, state='readonly')
+rep_type_dropdown = ttkb.Combobox(input_frame, textvariable=rep_type_var, state='readonly')
 rep_type_dropdown['values'] = CANDIDATE_TYPES
 rep_type_dropdown.current(0)
 rep_type_dropdown.grid(row=4, column=1, pady=5)
 
 # 5. Number and type of Democrat candidates
-ttk.Label(input_frame, text="Number of Democrat Candidates:").grid(row=5, column=0, sticky=tk.W, pady=5)
+ttkb.Label(input_frame, text="Number of Democrat Candidates:").grid(row=5, column=0, sticky=tk.W, pady=5)
 dem_var = tk.StringVar()
-dem_dropdown = ttk.Combobox(input_frame, textvariable=dem_var, state='readonly')
+dem_dropdown = ttkb.Combobox(input_frame, textvariable=dem_var, state='readonly')
 dem_dropdown['values'] = [str(i) for i in range(0,7)]
 dem_dropdown.current(0)
 dem_dropdown.grid(row=5, column=1, pady=5)
 
-ttk.Label(input_frame, text="Democrat Candidate Type:").grid(row=6, column=0, sticky=tk.W, pady=5)
+ttkb.Label(input_frame, text="Democrat Candidate Type:").grid(row=6, column=0, sticky=tk.W, pady=5)
 dem_type_var = tk.StringVar()
-dem_type_dropdown = ttk.Combobox(input_frame, textvariable=dem_type_var, state='readonly')
+dem_type_dropdown = ttkb.Combobox(input_frame, textvariable=dem_type_var, state='readonly')
 dem_type_dropdown['values'] = CANDIDATE_TYPES
 dem_type_dropdown.current(0)
 dem_type_dropdown.grid(row=6, column=1, pady=5)
 
 # 6. Number of 3rd Party Candidates
-ttk.Label(input_frame, text="Number of 3rd Party Candidates:").grid(row=7, column=0, sticky=tk.W, pady=5)
+ttkb.Label(input_frame, text="Number of 3rd Party Candidates:").grid(row=7, column=0, sticky=tk.W, pady=5)
 tp_var = tk.StringVar()
-tp_dropdown = ttk.Combobox(input_frame, textvariable=tp_var, state='readonly')
+tp_dropdown = ttkb.Combobox(input_frame, textvariable=tp_var, state='readonly')
 tp_dropdown['values'] = [str(i) for i in range(0,7)]
 tp_dropdown.current(0)
 tp_dropdown.grid(row=7, column=1, pady=5)
 
 # Progress Bar
 progress_var = tk.DoubleVar()
-progress_bar = ttk.Progressbar(root, variable=progress_var, maximum=100, length=400)
+progress_bar = ttkb.Progressbar(root, variable=progress_var, maximum=100, length=400)
 progress_bar.grid(row=1, column=0, padx=10, pady=10)
 
 # Global stop flag
@@ -426,19 +426,19 @@ def stop_simulation():
     stop_flag.set()
 
 # Run and Stop Buttons Frame
-buttons_frame = ttk.Frame(root)
+buttons_frame = ttkb.Frame(root)
 buttons_frame.grid(row=2, column=0, padx=10, pady=10)
 
 # Run Elections Button
-run_button = ttk.Button(buttons_frame, text="Run Elections", command=start_simulation)
+run_button = ttkb.Button(buttons_frame, text="Run Elections", command=start_simulation)
 run_button.pack(side=tk.LEFT, padx=5)
 
 # Stop Simulation Button
-stop_button = ttk.Button(buttons_frame, text="Cancel Simulation", command=stop_simulation, state='disabled')
+stop_button = ttkb.Button(buttons_frame, text="Cancel Simulation", command=stop_simulation, state='disabled')
 stop_button.pack(side=tk.LEFT, padx=5)
 
 # Results Display
-ttk.Label(root, text="Simulation Results:").grid(row=3, column=0, sticky=tk.W, padx=10)
+ttkb.Label(root, text="Simulation Results:").grid(row=3, column=0, sticky=tk.W, padx=10)
 result_text = tk.Text(root, height=15, width=80)
 result_text.grid(row=4, column=0, padx=10, pady=10)
 
@@ -457,13 +457,13 @@ if icon_file:
         if os.path.exists(icon_path):
             try:
                 # Set the window icon
-                app.iconbitmap(icon_path)
+                root.iconbitmap(icon_path)
             except Exception as e:
                 print(f"Error loading iconbitmap: {e}")
     else:
         if os.path.exists(icon_path):
             try:
-                app.iconphoto(False, tk.PhotoImage(file=icon_path))
+                root.iconphoto(False, tk.PhotoImage(file=icon_path))
             except Exception as e:
                 print(f"Error loading iconphoto: {e}")
 
