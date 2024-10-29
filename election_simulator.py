@@ -5,6 +5,19 @@ import pandas as pd
 import threading
 import random
 from queue import Queue
+import sys
+import os
+import ttkbootstrap as ttkb
+from ttkbootstrap.constants import *
+
+# Determine if the application is a frozen/executable bundle
+if getattr(sys, 'frozen', False):
+    # If the app is running as a bundle, the PyInstaller bootloader
+    # sets the app path into sys._MEIPASS.
+    bundle_dir = sys._MEIPASS
+else:
+    # If running in a normal Python environment
+    bundle_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Constants for candidate types
 CANDIDATE_TYPES = ["All Extreme", "All Moderate", "Even Mix"]
@@ -311,7 +324,7 @@ def reset_slider():
     red_slider.set(50)
 
 # Create the main window
-root = tk.Tk()
+root = ttkb.Window(themename="darkly")
 root.title("Election Monte Carlo Simulator")
 
 # Create a frame for inputs
@@ -428,6 +441,31 @@ stop_button.pack(side=tk.LEFT, padx=5)
 ttk.Label(root, text="Simulation Results:").grid(row=3, column=0, sticky=tk.W, padx=10)
 result_text = tk.Text(root, height=15, width=80)
 result_text.grid(row=4, column=0, padx=10, pady=10)
+
+# Determine the appropriate icon file based on the platform
+if sys.platform == "darwin":
+    icon_file = "icon.png"
+elif sys.platform == "win32":
+    icon_file = "icon.ico"
+else:
+    icon_file = None
+
+if icon_file:
+    icon_path = os.path.join(bundle_dir, icon_file)
+
+    if sys.platform == "win32":
+        if os.path.exists(icon_path):
+            try:
+                # Set the window icon
+                app.iconbitmap(icon_path)
+            except Exception as e:
+                print(f"Error loading iconbitmap: {e}")
+    else:
+        if os.path.exists(icon_path):
+            try:
+                app.iconphoto(False, tk.PhotoImage(file=icon_path))
+            except Exception as e:
+                print(f"Error loading iconphoto: {e}")
 
 # Start the Tkinter event loop
 root.mainloop()
