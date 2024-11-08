@@ -563,7 +563,7 @@ dem_heavy_funding_var = BooleanVar(value=False)  # Assume heavy funding disparit
 cstk.CTkLabel(input_frame, text="Number of Republican Candidates:").grid(row=3, column=0, sticky=tk.W, pady=5)
 repub_var = cstk.StringVar(value="2")
 repub_dropdown = cstk.CTkComboBox(input_frame, variable=repub_var, state='readonly')
-repub_dropdown.configure(values=[str(i) for i in range(0,7)])
+repub_dropdown.configure(values=[str(i) for i in range(0,9)])
 # repub_dropdown.set(2)  # Set default to 2 candidates
 repub_dropdown.grid(row=3, column=1, pady=5)
 
@@ -588,7 +588,7 @@ rep_type_dropdown.grid(row=4, column=1, pady=5)
 cstk.CTkLabel(input_frame, text="Number of Democrat Candidates:").grid(row=5, column=0, sticky=tk.W, pady=5)
 dem_var = cstk.StringVar(value="2")
 dem_dropdown = cstk.CTkComboBox(input_frame, variable=dem_var, state='readonly')
-dem_dropdown.configure(values=[str(i) for i in range(0,7)])
+dem_dropdown.configure(values=[str(i) for i in range(0,9)])
 # dem_dropdown.set(2)  # Set default to 2 candidates
 dem_dropdown.grid(row=5, column=1, pady=5)
 
@@ -631,7 +631,7 @@ toggle_funding('dem')
 cstk.CTkLabel(input_frame, text="Number of 3rd Party Candidates:").grid(row=7, column=0, sticky=tk.W, pady=5)
 tp_var = cstk.StringVar(value="1")
 tp_dropdown = cstk.CTkComboBox(input_frame, variable=tp_var, state='readonly')
-tp_dropdown.configure(values=[str(i) for i in range(0,7)])
+tp_dropdown.configure(values=[str(i) for i in range(0,9)])
 # tp_dropdown.set(1)  # Set default to 1 candidate
 tp_dropdown.grid(row=7, column=1, pady=5)
 
